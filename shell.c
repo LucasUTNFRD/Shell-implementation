@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <string.h>
 
 #define  BUFFER_SIZE 1024
 #define TOK_DELIM " \t\r\n\a"
@@ -18,7 +19,13 @@ char **sh_tokenize(char *input);
 //execute
 int sh_exec(char **argv);
 
-void sh_init(void){
+char *builtin[] = {"cd","help","exit"};
+
+int sh_exec_builtins(char **argv);
+
+int sh_exec_cd(char **args);
+
+static void sh_init(void){
   char *input;
   char **args; //array of char pointers
   int status;
@@ -26,7 +33,8 @@ void sh_init(void){
     printf("> ");
     input = sh_read_input();
     args = sh_tokenize(input);
-    status = sh_exec(args);
+    // status = sh_exec(args);
+    status = sh_exec_builtins(args);
 
     free(input); 
     free(args);
@@ -79,7 +87,8 @@ char **sh_tokenize(char *input){
 
 int sh_exec(char **argv){
   pid_t pid,pid_child;
-  int status; 
+  int status;
+    
   pid = fork();
   if (pid == 0) {/*child process */
     if(execvp(argv[0],argv)==-1){
@@ -96,6 +105,22 @@ int sh_exec(char **argv){
   return 1;
 }
 
+//use a function pointer to execute builtin command
+
+int sh_exec_builtins(char **argv){
+  if(strcmp(argv[0],"cd")==0){
+    return sh_exec_cd(argv);
+  } 
+  return sh_exec(argv);
+
+}
+
+int sh_exec_cd(char **argv){
+  if(chdir(argv[1])!=0){
+    perror("cd error");
+  }
+  return 1;
+}
 
 
 int main(int argc, char *argv[])
