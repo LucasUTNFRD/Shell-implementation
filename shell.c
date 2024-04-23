@@ -5,27 +5,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <string.h>
-
-#define  BUFFER_SIZE 1024
-#define TOK_DELIM " \t\r\n\a"
-//define a buffer for reading user input
-
-//handle user input
-
-//read 
-char *sh_read_input(void);
-//parse
-char **sh_tokenize(char *input);
-//execute
-int sh_exec(char **argv);
-
-int sh_exec_builtins(char **argv);
-
-int sh_exec_cd(char **args);
-int sh_exec_help(char **args);
-int sh_exec_exit(char **args);
-
-typedef int (*shell_func)(char **args);
+#include "shell.h"
 
 shell_func shell_funcs[] = {&sh_exec_cd, &sh_exec_help, &sh_exec_exit};
 
