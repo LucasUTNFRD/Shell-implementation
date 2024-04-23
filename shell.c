@@ -19,11 +19,17 @@ char **sh_tokenize(char *input);
 //execute
 int sh_exec(char **argv);
 
-char *builtin[] = {"cd","help","exit"};
-
 int sh_exec_builtins(char **argv);
 
 int sh_exec_cd(char **args);
+int sh_exec_help(char **args);
+int sh_exec_exit(char **args);
+
+typedef int (*shell_func)(char **args);
+
+shell_func shell_funcs[] = {&sh_exec_cd, &sh_exec_help, &sh_exec_exit};
+
+char *builtin[] = {"cd","help","exit"};
 
 static void sh_init(void){
   char *input;
@@ -38,7 +44,7 @@ static void sh_init(void){
 
     free(input); 
     free(args);
-  }while (1);
+  }while (status);
 
 }
 
@@ -108,11 +114,12 @@ int sh_exec(char **argv){
 //use a function pointer to execute builtin command
 
 int sh_exec_builtins(char **argv){
-  if(strcmp(argv[0],"cd")==0){
-    return sh_exec_cd(argv);
-  } 
-  return sh_exec(argv);
+  size_t len = sizeof(builtin) / sizeof(char *);
+  for (size_t i = 0; i<len;i++) {
+    if(strcmp(argv[0],builtin[i])==0) return shell_funcs[i](argv); 
+  }
 
+  return sh_exec(argv);
 }
 
 int sh_exec_cd(char **argv){
@@ -122,8 +129,23 @@ int sh_exec_cd(char **argv){
   return 1;
 }
 
+int sh_exec_help(char **argv){
+  size_t len = sizeof(builtin)/sizeof(char*);
+  printf("shell made by Lucas Delgado\n");
+  printf("--------built-in commands--------\n");
+  for(size_t i =0 ;i<len;i++){
+    printf("%d_ %s\n",i+1,builtin[i]);
+  }
+  return 1;
+}
 
-int main(int argc, char *argv[])
+int sh_exec_exit(char **argv){
+  return 0;
+}
+
+
+
+int main(void)
 { 
   sh_init();
   return 0;
