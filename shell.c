@@ -11,19 +11,21 @@ shell_func shell_funcs[] = {&sh_exec_cd, &sh_exec_help, &sh_exec_exit};
 
 char *builtin[] = {"cd","help","exit"};
 
+
 static void sh_init(void){
   char *input;
   char **args; //array of char pointers
   int status;
+  int background;
   do {
     printf("> ");
     input = sh_read_input();
-    args = sh_tokenize(input);
+    args = sh_tokenize(input,&background);
     // status = sh_exec(args);
     status = sh_exec_builtins(args);
 
-    free(input); 
-    free(args);
+    free(input);/*free input buffer */ 
+    free(args);/*free arg vector */
   }while (status);
 
 }
@@ -44,7 +46,14 @@ char *sh_read_input(void){
     return buffer;
 };
 
-char **sh_tokenize(char *input){
+//this functions check if last token is & or in last token the last char is &
+int isBackground(char **args,size_t count){
+  char *lastToken = args[count-1] ;
+  size_t size = strlen(lastToken);
+  return (strcmp(lastToken,"&")==0 || lastToken[size-1]=='&') ? 1 : 0;
+}
+//
+char **sh_tokenize(char *input,int *background){
   //save each char*
   char *token;
   size_t count = 0;
@@ -62,18 +71,20 @@ char **sh_tokenize(char *input){
     //put token in argv position
     strcpy(argv[count],token);
     //tracin if parse was ok 
-    // printf("%s\n",token);
+    printf("%s\n",token);
     //make token read a null to read next token;
     token=strtok(NULL,TOK_DELIM);
     //increment argv size
     count++;
   }
+  *background = isBackground(argv, count);
+  // printf("%d\n",*background);
   return  argv;
 }
 
 int sh_exec(char **argv){
   pid_t pid,pid_child;
-  int status;
+  int status; //0 indicates succesfull termination, non zero error.
     
   pid = fork();
   if (pid == 0) {/*child process */
@@ -83,10 +94,13 @@ int sh_exec(char **argv){
     exit(EXIT_FAILURE);
   }else if (pid < 0) {/*error in fork */
     perror("fork error");
-  }else { /*SHELL PROCESS */
+  }else { /*SHELL PROCESS aka parent process */
     status = 0;
-    pid_child =wait(&status);
-		// printf("PID %d finalizado con retorno %d\n",pid_child,status/256);
+    // pid_child =wait(&status);
+    pid_child = waitpid(pid, &status, 0);
+    printf("PID %d finished with status %d\n", pid_child, WEXITSTATUS(status));
+    // This function call waits for the child process with the process ID
+    // pid to terminate. The status variable holds the exit status of the child process.
   }
   return 1;
 }
@@ -114,7 +128,7 @@ int sh_exec_help(char **argv){
   printf("shell made by Lucas Delgado\n");
   printf("--------built-in commands--------\n");
   for(size_t i =0 ;i<len;i++){
-    printf("%d_ %s\n",i+1,builtin[i]);
+    printf("%d_  %s\n",i+1,builtin[i]);
   }
   return 1;
 }
@@ -128,5 +142,6 @@ int sh_exec_exit(char **argv){
 int main(void)
 { 
   sh_init();
+  
   return 0;
 }
