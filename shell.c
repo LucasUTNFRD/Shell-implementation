@@ -71,7 +71,7 @@ char **sh_tokenize(char *input,int *background){
     //put token in argv position
     strcpy(argv[count],token);
     //tracin if parse was ok 
-    printf("%s\n",token);
+    // printf("%s\n",token);
     //make token read a null to read next token;
     token=strtok(NULL,TOK_DELIM);
     //increment argv size
@@ -82,28 +82,54 @@ char **sh_tokenize(char *input,int *background){
   return  argv;
 }
 
+// int sh_exec(char **argv){
+//   pid_t pid,pid_child;
+//   int status; //0 indicates succesfull termination, non zero error.
+//     
+//   pid = fork();
+//   if (pid == 0) {/*child process */
+//     if(execvp(argv[0],argv)==-1){
+//       perror("exec error");
+//     }
+//     exit(EXIT_FAILURE);
+//   }else if (pid < 0) {/*error in fork */
+//     perror("fork error");
+//   }else { /*SHELL PROCESS aka parent process */
+//     status = 0;
+//     pid_child = waitpid(pid, &status, 0);
+//     // printf("PID %d finished with status %d\n", pid_child, WEXITSTATUS(status));
+//     // This function call waits for the child process with the process ID
+//     // pid to terminate. The status variable holds the exit status of the child process.
+//   }
+//   return 1;
+// }
+
+
 int sh_exec(char **argv){
   pid_t pid,pid_child;
   int status; //0 indicates succesfull termination, non zero error.
     
   pid = fork();
-  if (pid == 0) {/*child process */
-    if(execvp(argv[0],argv)==-1){
-      perror("exec error");
-    }
-    exit(EXIT_FAILURE);
-  }else if (pid < 0) {/*error in fork */
-    perror("fork error");
-  }else { /*SHELL PROCESS aka parent process */
-    status = 0;
-    // pid_child =wait(&status);
-    pid_child = waitpid(pid, &status, 0);
-    printf("PID %d finished with status %d\n", pid_child, WEXITSTATUS(status));
-    // This function call waits for the child process with the process ID
-    // pid to terminate. The status variable holds the exit status of the child process.
+  
+  switch (pid) {
+    case -1:
+      perror("fork error");
+      break;
+    case 0:
+      if(execvp(argv[0],argv)==-1){
+        perror("exec error");
+      }
+      exit(EXIT_FAILURE);     
+      break;
+    default:
+      status = 0;
+      pid_child = waitpid(pid, &status, 0);
+      break; 
+  
   }
   return 1;
 }
+
 
 //use a function pointer to execute builtin command
 
