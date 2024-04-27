@@ -5,13 +5,52 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <string.h>
-#include "shell.h"
 #include <signal.h>
+#define  BUFFER_SIZE 1024
+#define TOK_DELIM " \t\r\n\a"
+
+
+//function to read input
+char *sh_read_input(void);
+
+//function for parsing input
+char **sh_tokenize(char *input,int *background);
+
+//function for executing built-ins
+int sh_exec_builtins(char **argv,int background);
+//if not built in cmd parsed then execute
+int sh_exec(char **argv,int background);
+
+//functions for array of function pointers
+int sh_exec_cd(char **args);
+int sh_exec_help(char **args);
+int sh_exec_exit(char **args);
+
+//function to check if input contains &
+int isBackground(char **args,size_t count);
+
+//definig a pointer function;
+typedef int (*shell_func)(char **args);
+
+//functions for dynamic array declaration
+void add_background_process(pid_t process);
+void free_background_process(void);
+void remove_background_process(pid_t process);
+void print_background_process(void);
+
+
 
 //global vars
 pid_t *background_process_list = NULL;
-pid_t list_size = 0;
+size_t list_size = 0;
 
+shell_func shell_funcs[] = {&sh_exec_cd, &sh_exec_help, &sh_exec_exit};
+
+char *builtin[] = {"cd","help","exit"};
+
+
+
+//functions bodies
 void add_background_process(pid_t process){
   
   background_process_list = realloc(background_process_list,(list_size+1) * sizeof(pid_t));
@@ -37,22 +76,48 @@ void remove_background_process(pid_t process){
   }
 }
 
-shell_func shell_funcs[] = {&sh_exec_cd, &sh_exec_help, &sh_exec_exit};
+void print_background_process(void){
+  for(size_t i = 0;i<list_size;i++){
+    printf("%d ",background_process_list[i]);
+  }
+  printf("\n");
+}
 
-char *builtin[] = {"cd","help","exit"};
+void handle_sigchld(int sig) {
+    pid_t pid;
+    int status=0;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        printf("Background process %d finished with exit status: %d\n", pid, WEXITSTATUS(status));
+        remove_background_process(pid);
+        status = 0;
+    }
+}
 
+
+// Function to handle SIGALRM signal
+void handle_alarm(int sig) {
+    print_background_process();
+    // Re-arm the alarm
+    alarm(5); // Print the list every 5 seconds
+}
 
 static void sh_init(void){
   char *input;
   char **args; //array of char pointers
   int status;
   int background;
+  
+  
+  signal(SIGCHLD, handle_sigchld);
+  signal(SIGALRM, handle_alarm);
+  alarm(5); // Start alarm to print background processes initially
+
   do {
     printf("> ");
     input = sh_read_input();
     args = sh_tokenize(input,&background);
     // status = sh_exec(args);
-    status = sh_exec_builtins(args);
+    status = sh_exec_builtins(args,background);
 
     free(input);/*free input buffer */ 
     free(args);/*free arg vector */
@@ -112,10 +177,11 @@ char **sh_tokenize(char *input,int *background){
   return  argv;
 }
 
-int sh_exec(char **argv){
-  pid_t pid,pid_child;
+
+int sh_exec(char **argv,int background){
+  pid_t pid;
   int status; //0 indicates succesfull termination, non zero error.
-    
+  
   pid = fork();
   
   switch (pid) {
@@ -126,29 +192,32 @@ int sh_exec(char **argv){
       /*child process */
       if(execvp(argv[0],argv)==-1){
         perror("exec error");
+        exit(EXIT_FAILURE);     
       }
-      exit(EXIT_FAILURE);     
       break;
     default:
       /*parent process */
-      status = 0;
-      pid_child = waitpid(pid, &status, 0);
-      break; 
-  
+      if(background){
+        add_background_process(pid);
+        printf("process with PID: %d created in background\n",pid);
+      }else {
+        /*run foreground */
+        waitpid(pid, &status, 0);
+        printf("executing (): PID %d finished with exit status: %d\n",pid,WEXITSTATUS(status));
+      
+      }
+
   }
   return 1;
 }
 
-
-//use a function pointer to execute builtin command
-
-int sh_exec_builtins(char **argv){
+int sh_exec_builtins(char **argv,int background){
   size_t len = sizeof(builtin) / sizeof(char *);
   for (size_t i = 0; i<len;i++) {
     if(strcmp(argv[0],builtin[i])==0) return shell_funcs[i](argv); 
   }
 
-  return sh_exec(argv);
+  return sh_exec(argv,background);
 }
 
 int sh_exec_cd(char **argv){
@@ -163,7 +232,7 @@ int sh_exec_help(char **argv){
   printf("shell made by Lucas Delgado\n");
   printf("--------built-in commands--------\n");
   for(size_t i =0 ;i<len;i++){
-    printf("%d_  %s\n",i+1,builtin[i]);
+    printf("%zu_  %s\n",i+1,builtin[i]);
   }
   return 1;
 }
