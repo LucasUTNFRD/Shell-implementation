@@ -6,6 +6,36 @@
 #include <sys/wait.h>
 #include <string.h>
 #include "shell.h"
+#include <signal.h>
+
+//global vars
+pid_t *background_process_list = NULL;
+pid_t list_size = 0;
+
+void add_background_process(pid_t process){
+  
+  background_process_list = realloc(background_process_list,(list_size+1) * sizeof(pid_t));
+  background_process_list[list_size++] = process;
+}
+
+void free_background_process(void){
+  free(background_process_list);
+}
+//when removed val is setted to 0, ideally we should shift array_to left when remove
+void remove_background_process(pid_t process){
+//find pid
+  for(size_t i = 0; i<list_size ; i++){
+    if (background_process_list[i] == process) {
+      for(size_t j = i;j<list_size-1;j++){
+        background_process_list[j]=background_process_list[j+1];
+      }
+      //decrease size of dynamic array;
+      background_process_list = realloc(background_process_list,(list_size-1) * sizeof(pid_t));
+      list_size--;
+      break;
+    }
+  }
+}
 
 shell_func shell_funcs[] = {&sh_exec_cd, &sh_exec_help, &sh_exec_exit};
 
@@ -82,29 +112,6 @@ char **sh_tokenize(char *input,int *background){
   return  argv;
 }
 
-// int sh_exec(char **argv){
-//   pid_t pid,pid_child;
-//   int status; //0 indicates succesfull termination, non zero error.
-//     
-//   pid = fork();
-//   if (pid == 0) {/*child process */
-//     if(execvp(argv[0],argv)==-1){
-//       perror("exec error");
-//     }
-//     exit(EXIT_FAILURE);
-//   }else if (pid < 0) {/*error in fork */
-//     perror("fork error");
-//   }else { /*SHELL PROCESS aka parent process */
-//     status = 0;
-//     pid_child = waitpid(pid, &status, 0);
-//     // printf("PID %d finished with status %d\n", pid_child, WEXITSTATUS(status));
-//     // This function call waits for the child process with the process ID
-//     // pid to terminate. The status variable holds the exit status of the child process.
-//   }
-//   return 1;
-// }
-
-
 int sh_exec(char **argv){
   pid_t pid,pid_child;
   int status; //0 indicates succesfull termination, non zero error.
@@ -116,12 +123,14 @@ int sh_exec(char **argv){
       perror("fork error");
       break;
     case 0:
+      /*child process */
       if(execvp(argv[0],argv)==-1){
         perror("exec error");
       }
       exit(EXIT_FAILURE);     
       break;
     default:
+      /*parent process */
       status = 0;
       pid_child = waitpid(pid, &status, 0);
       break; 
@@ -162,8 +171,6 @@ int sh_exec_help(char **argv){
 int sh_exec_exit(char **argv){
   return 0;
 }
-
-
 
 int main(void)
 { 

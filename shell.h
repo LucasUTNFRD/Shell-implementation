@@ -27,7 +27,7 @@ int isBackground(char **args,size_t count);
 //definig a pointer function;
 typedef int (*shell_func)(char **args);
 
-
+void sigchld_handler(int signal);
 
 
 #endif // !SHELL_H
