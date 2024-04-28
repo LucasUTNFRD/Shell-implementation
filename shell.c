@@ -4,8 +4,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <string.h>
-#include <signal.h>
 #define  BUFFER_SIZE 1024
 #define TOK_DELIM " \t\r\n\a"
 
@@ -83,23 +81,7 @@ void print_background_process(void){
   printf("\n");
 }
 
-void handle_sigchld(int sig) {
-    pid_t pid;
-    int status=0;
-    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-        printf("Background process %d finished with exit status: %d\n", pid, WEXITSTATUS(status));
-        remove_background_process(pid);
-        status = 0;
-    }
-}
 
-
-// Function to handle SIGALRM signal
-void handle_alarm(int sig) {
-    print_background_process();
-    // Re-arm the alarm
-    alarm(5); // Print the list every 5 seconds
-}
 
 static void sh_init(void){
   char *input;
@@ -108,9 +90,6 @@ static void sh_init(void){
   int background;
   
   
-  signal(SIGCHLD, handle_sigchld);
-  signal(SIGALRM, handle_alarm);
-  alarm(5); // Start alarm to print background processes initially
 
   do {
     printf("> ");
