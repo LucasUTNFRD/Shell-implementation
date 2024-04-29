@@ -4,9 +4,15 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <signal.h>
+
 #define  BUFFER_SIZE 1024
 #define TOK_DELIM " \t\r\n\a"
 
+//singal handlers
+void sig_child(int signum);
+void sig_int(int signum);
+void sig_alarm(int signum);
 
 //function to read input
 char *sh_read_input(void);
@@ -75,12 +81,15 @@ void remove_background_process(pid_t process){
 }
 
 void print_background_process(void){
+  if(list_size == 0){
+    printf("No processes running in background\n");
+  }else{
   for(size_t i = 0;i<list_size;i++){
     printf("%d ",background_process_list[i]);
   }
   printf("\n");
 }
-
+}
 
 
 static void sh_init(void){
@@ -156,6 +165,32 @@ char **sh_tokenize(char *input,int *background){
   return  argv;
 }
 
+// Signal handler for SIGCHLD
+void sig_child(int signum) {
+    int status;
+    pid_t pid;
+    
+    // Wait for any child process without blocking
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        // Remove the finished child process from the background process list
+        remove_background_process(pid);
+        printf("Child process with PID %d terminated\n", pid);
+    }
+}
+
+//Signal handler for  sig_int
+void sig_int(int signum){
+  printf("SIGINT received. Exiting the shell.\n");
+  free_background_process(); // Free the background process list memory
+  exit(EXIT_SUCCESS);
+}
+
+// Signal handler for SIGALRM
+void sig_alarm(int signum) {
+    printf("Background process list:\n");
+    print_background_process(); // Print the background process list
+    alarm(5); // Restart the alarm signal to trigger after 5 seconds again
+}
 
 int sh_exec(char **argv,int background){
   pid_t pid;
@@ -170,7 +205,7 @@ int sh_exec(char **argv,int background){
     case 0:
       /*child process */
       if(execvp(argv[0],argv)==-1){
-        perror("exec error");
+        // perror("exec error");
         exit(EXIT_FAILURE);     
       }
       break;
@@ -189,6 +224,8 @@ int sh_exec(char **argv,int background){
   }
   return 1;
 }
+
+
 
 int sh_exec_builtins(char **argv,int background){
   size_t len = sizeof(builtin) / sizeof(char *);
@@ -222,6 +259,12 @@ int sh_exec_exit(char **argv){
 
 int main(void)
 { 
+// Register signal handlers
+  // signal(SIGCHLD, sig_child);
+  signal(SIGINT, sig_int);
+  signal(SIGALRM, sig_alarm);
+  alarm(10); // Start the alarm signal to print background processes every 5 seconds
+
   sh_init();
   
   return 0;
