@@ -12,7 +12,6 @@
 //singal handlers
 void sig_child(int signum);
 void sig_int(int signum);
-void sig_alarm(int signum);
 
 //function to read input
 char *sh_read_input(void);
@@ -29,6 +28,7 @@ int sh_exec(char **argv,int background);
 int sh_exec_cd(char **args);
 int sh_exec_help(char **args);
 int sh_exec_exit(char **args);
+int sh_exec_jobs(char **args);
 
 //function to check if input contains &
 int isBackground(char **args,size_t count);
@@ -48,9 +48,9 @@ void print_background_process(void);
 pid_t *background_process_list = NULL;
 size_t list_size = 0;
 
-shell_func shell_funcs[] = {&sh_exec_cd, &sh_exec_help, &sh_exec_exit};
+shell_func shell_funcs[] = {&sh_exec_cd, &sh_exec_help, &sh_exec_exit,&sh_exec_jobs};
 
-char *builtin[] = {"cd","help","exit"};
+char *builtin[] = {"cd","help","exit","jobs"};
 
 
 
@@ -81,7 +81,7 @@ void remove_background_process(pid_t process){
 }
 
 void print_background_process(void){
-  if(list_size == 0){
+  if(background_process_list == NULL){
     printf("No processes running in background\n");
   }else{
   for(size_t i = 0;i<list_size;i++){
@@ -99,7 +99,7 @@ static void sh_init(void){
   int background;
   
   
-
+  
   do {
     printf("> ");
     input = sh_read_input();
@@ -110,7 +110,8 @@ static void sh_init(void){
     free(input);/*free input buffer */ 
     free(args);/*free arg vector */
   }while (status);
-
+  //free bacgroun process
+  free_background_process();
 }
 
 char *sh_read_input(void){
@@ -185,13 +186,6 @@ void sig_int(int signum){
   exit(EXIT_SUCCESS);
 }
 
-// Signal handler for SIGALRM
-void sig_alarm(int signum) {
-    printf("Background process list:\n");
-    print_background_process(); // Print the background process list
-    alarm(5); // Restart the alarm signal to trigger after 5 seconds again
-}
-
 int sh_exec(char **argv,int background){
   pid_t pid;
   int status; //0 indicates succesfull termination, non zero error.
@@ -204,6 +198,9 @@ int sh_exec(char **argv,int background){
       break;
     case 0:
       /*child process */
+      // child must not receive the same type of signal of parent
+      signal(SIGINT,SIG_DFL);
+      signal(SIGCHLD,SIG_DFL);
       if(execvp(argv[0],argv)==-1){
         // perror("exec error");
         exit(EXIT_FAILURE);     
@@ -226,7 +223,8 @@ int sh_exec(char **argv,int background){
 }
 
 
-
+//function that loops and check if argument given
+//is in builtin list to call that built in function
 int sh_exec_builtins(char **argv,int background){
   size_t len = sizeof(builtin) / sizeof(char *);
   for (size_t i = 0; i<len;i++) {
@@ -242,6 +240,12 @@ int sh_exec_cd(char **argv){
   }
   return 1;
 }
+
+int sh_exec_jobs(char **argv){
+  print_background_process();
+  return 1;
+}
+
 
 int sh_exec_help(char **argv){
   size_t len = sizeof(builtin)/sizeof(char*);
@@ -260,10 +264,8 @@ int sh_exec_exit(char **argv){
 int main(void)
 { 
 // Register signal handlers
-  // signal(SIGCHLD, sig_child);
+  signal(SIGCHLD, sig_child);
   signal(SIGINT, sig_int);
-  signal(SIGALRM, sig_alarm);
-  alarm(10); // Start the alarm signal to print background processes every 5 seconds
 
   sh_init();
   
