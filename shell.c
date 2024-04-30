@@ -1,186 +1,181 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
 #include <sys/wait.h>
+#include <signal.h>
 
-#define  BUFFER_SIZE 1024
-#define TOK_DELIM " \t\r\n\a"
+#define MAX_COMMAND_LENGTH 100
+#define MAX_ARGUMENTS 10
 
-//function to read input
-char *sh_read_input(void);
+// Struct to store information about background jobs
+typedef struct {
+    pid_t pid;
+    int job_id;
+    char command[MAX_COMMAND_LENGTH];
+} BackgroundJob;
 
-//function for parsing input
-char **sh_tokenize(char *input,int *background);
+BackgroundJob background_jobs[MAX_ARGUMENTS];
+int num_background_jobs = 0;
 
-//function for executing built-ins
-int sh_exec_builtins(char **argv,int background);
-//if not built in cmd parsed then execute
-int sh_exec(char **argv,int background);
+void sigchld_handler(int signum) ;
 
-//functions for array of function pointers
-int sh_exec_cd(char **args);
-int sh_exec_help(char **args);
-int sh_exec_exit(char **args);
+void sigint_handler(int signum) ;
+char *read_input() ;
+char **tokenize_input(char *input, int *arg_size) ;
+void exec_cd(char **args);
+void exec_jobs(char **args);
 
-//function to check if input contains &
-int isBackground(char **args,size_t count);
+void execute_builtin(char **argv) ;
+typedef void (*shell_func)(char **args);
 
-//defining a pointer function;
-typedef int (*shell_func)(char **args);
+shell_func shell_funcs[] = {&exec_cd, &exec_jobs};
 
+char *builtin[] = {"cd", "jobs"};
 
-shell_func shell_funcs[] = {&sh_exec_cd, &sh_exec_help, &sh_exec_exit};
-
-char *builtin[] = {"cd","help","exit"};
-
-
-
-
-static void sh_init(void){
-  char *input;
-  char **args; //array of char pointers
-  int status;
-  int background;
-
-  do {
-    printf("> ");
-    input = sh_read_input();
-    args = sh_tokenize(input,&background);
-    // status = sh_exec(args);
-    status = sh_exec_builtins(args,background);
-
-    free(input);/*free input buffer */ 
-    free(args);/*free arg vector */
-  }while (status);
+// Signal handler for SIGCHLD (child process termination)
+void sigchld_handler(int signum) {
+    pid_t pid;
+    int status;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        int i;
+        for (i = 0; i < num_background_jobs; ++i) {
+            if (background_jobs[i].pid == pid) {
+                printf("[%d] Done\t%s\n", background_jobs[i].job_id, background_jobs[i].command);
+                // Remove the completed job from the list
+                memmove(&background_jobs[i], &background_jobs[i + 1], (num_background_jobs - i - 1) * sizeof(BackgroundJob));
+                num_background_jobs--;
+                break;
+            }
+        }
+    }
 }
 
-char *sh_read_input(void){
+void sigint_handler(int signum){
+    if (num_background_jobs != 0) {
+        printf("sig_int(%d):background process pending, cant exit\n", signum);
+    }else{
+//        free(background_jobs);
+        printf("sig_int(%d): ended!\n",signum);
+        exit(0);
+    }
+
+}
+
+// Execute commands
+void execute_command(char **args, int background) {
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("fork");
+        exit(EXIT_FAILURE);
+    } else if (pid == 0) {
+        // Child process
+        if (execvp(args[0], args) == -1) {
+            perror("execvp");
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        // Parent process
+        if (!background) {
+            // Wait for foreground process to finish
+            waitpid(pid, NULL, 0);
+        } else {
+            // Background process
+            BackgroundJob job = {pid, num_background_jobs + 1, ""};
+            strncpy(job.command, args[0], MAX_COMMAND_LENGTH);
+            background_jobs[num_background_jobs++] = job;
+            printf("[%d] %d\t%s\n", job.job_id, job.pid, job.command);
+        }
+    }
+}
+
+char *read_input() {
     char *buffer;
     size_t bufsize = 32;
     ssize_t characters;
 
     buffer = (char *)malloc(bufsize * sizeof(char));
-    if(buffer == NULL)
-    {
+    if (buffer == NULL) {
         perror("Unable to allocate buffer");
         exit(1);
     }
-    //
-    characters = getline(&buffer,&bufsize,stdin);
+
+    printf("> ");
+    characters = getline(&buffer, &bufsize, stdin);
     return buffer;
-};
-
-//this functions check if last token is & or in last token the last char is &
-int isBackground(char **args,size_t count){
-    if(args[count-1] != NULL && strcmp(args[count-1],"&")==0){
-        //background job
-        return 1;
-    }else return 0;
-}
-//
-char **sh_tokenize(char *input,int *background){
-  //save each char*
-  char *token;
-  size_t count = 0;
-  char **argv = NULL;
-
-// Each call to strtok() returns a pointer to a null-terminated string  contain‐
-//        ing the next token.  This string does not include the delimiting byte.  If no
-//        more tokens are found, strtok() returns NULL.
-  token = strtok(input,TOK_DELIM);
-  while(token != NULL){
-    //while there is a token reallocate space in memory to save the token
-    argv = realloc(argv,(count+1) * sizeof(char*));
-    //en each array index allocate memory for saving the read token
-    argv[count] = malloc(sizeof(char)*(strlen(token)+1));
-    //put token in argv position
-    strcpy(argv[count],token);
-    //tracin if parse was ok 
-    // printf("%s\n",token);
-    //make token read a null to read next token;
-    token=strtok(NULL,TOK_DELIM);
-    //increment argv size
-    count++;
-  }
-  argv = realloc(argv, (count + 1) * sizeof(char*));
-  argv[count] = NULL;
-
-  *background = isBackground(argv, count);
-   printf("%d\n",*background);
-  return  argv;
 }
 
-int sh_exec(char **argv,int background){
-  pid_t pid;
-  int status; //0 indicates succesfull termination, non zero error.
-  
-  pid = fork();
-  
-  switch (pid) {
-    case -1:
-      perror("fork error");
-      break;
-    case 0:
-      /*child process */
-      if(execvp(argv[0],argv)==-1){
-         perror("execvp");
-        exit(EXIT_FAILURE);     
-      }
-      break;
-    default:
-      /*parent process */
-      if(background){
-          //logic
-      }else {
-        /*run foreground */
-        waitpid(pid, &status, 0);
-        printf("executing (): PID %d finished with exit status: %d\n",pid,WEXITSTATUS(status));
-      }
+char **tokenize_input(char *input, int *arg_size) {
+    int i = 0;
+    char **args = (char **)malloc((MAX_ARGUMENTS + 1) * sizeof(char *));
+    if (args == NULL) {
+        perror("Unable to allocate memory for arguments");
+        exit(1);
+    }
 
-  }
-  return 1;
+    args[i] = strtok(input, " \n");
+    while (args[i] != NULL && i < MAX_ARGUMENTS) {
+        i++;
+        args[i] = strtok(NULL, " \n");
+    }
+    args[i] = NULL;
+    *arg_size = i;
+    return args;
 }
 
-
-//function that loops and check if argument given
-//is in builtin list to call that built in function
-int sh_exec_builtins(char **argv,int background){
-  size_t len = sizeof(builtin) / sizeof(char *);
-  for (size_t i = 0; i<len;i++) {
-    if(strcmp(argv[0],builtin[i])==0) return shell_funcs[i](argv); 
-  }
-
-  return sh_exec(argv,background);
+void exec_cd(char **argv) {
+    if (argv[1] == NULL) {
+        fprintf(stderr, "cd: missing argument\n");
+        return;
+    }
+    if (chdir(argv[1]) != 0) {
+        perror("cd error");
+    }
 }
 
-int sh_exec_cd(char **argv){
-  if(chdir(argv[1])!=0){
-    perror("cd error");
-  }
-  return 1;
+void exec_jobs(char **argv) {
+    // List background jobs
+    int j;
+    for (j = 0; j < num_background_jobs; ++j) {
+        printf("[%d] %d\t%s\n", background_jobs[j].job_id, background_jobs[j].pid, background_jobs[j].command);
+    }
 }
 
-
-int sh_exec_help(char **argv){
-  size_t len = sizeof(builtin)/sizeof(char*);
-  printf("shell made by Lucas Delgado\n");
-  printf("--------built-in commands--------\n");
-  for(size_t i =0 ;i<len;i++){
-    printf("%zu_  %s\n",i+1,builtin[i]);
-  }
-  return 1;
+void execute_builtin(char **argv) {
+    size_t len = sizeof(builtin) / sizeof(char *);
+    for (size_t i = 0; i < len; i++) {
+        if (strcmp(argv[0], builtin[i]) == 0) {
+            shell_funcs[i](argv);
+            return;
+        }
+    }
 }
 
-int sh_exec_exit(char **argv){
-  return 0;
-}
+int main() {
+    char *input;
+    char **args;
+    int arg_size;
+    signal(SIGCHLD, sigchld_handler);
+    signal(SIGINT,sigint_handler);
+    while (1) {
+        input = read_input();
+        args = tokenize_input(input, &arg_size);
 
-int main(void)
-{ 
+        execute_builtin(args);
 
-  sh_init();
-  
-  return 0;
+        int background = 0;
+
+        if (arg_size > 0 && strcmp(args[arg_size - 1], "&") == 0) {
+            // Background job
+            background = 1;
+            args[arg_size - 1] = NULL;
+            arg_size--; // Update argument count
+        }
+        execute_command(args, background);
+
+        free(input);
+        free(args);
+    }
+    return 0;
 }
