@@ -4,14 +4,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <signal.h>
 
 #define  BUFFER_SIZE 1024
 #define TOK_DELIM " \t\r\n\a"
-
-//singal handlers
-void sig_child(int signum);
-void sig_int(int signum);
 
 //function to read input
 char *sh_read_input(void);
@@ -28,68 +23,19 @@ int sh_exec(char **argv,int background);
 int sh_exec_cd(char **args);
 int sh_exec_help(char **args);
 int sh_exec_exit(char **args);
-int sh_exec_jobs(char **args);
 
 //function to check if input contains &
 int isBackground(char **args,size_t count);
 
-//definig a pointer function;
+//defining a pointer function;
 typedef int (*shell_func)(char **args);
 
-//functions for dynamic array declaration
-void add_background_process(pid_t process);
-void free_background_process(void);
-void remove_background_process(pid_t process);
-void print_background_process(void);
+
+shell_func shell_funcs[] = {&sh_exec_cd, &sh_exec_help, &sh_exec_exit};
+
+char *builtin[] = {"cd","help","exit"};
 
 
-
-//global vars
-pid_t *background_process_list = NULL;
-size_t list_size = 0;
-
-shell_func shell_funcs[] = {&sh_exec_cd, &sh_exec_help, &sh_exec_exit,&sh_exec_jobs};
-
-char *builtin[] = {"cd","help","exit","jobs"};
-
-
-
-//functions bodies
-void add_background_process(pid_t process){
-  
-  background_process_list = realloc(background_process_list,(list_size+1) * sizeof(pid_t));
-  background_process_list[list_size++] = process;
-}
-
-void free_background_process(void){
-  free(background_process_list);
-}
-//when removed val is setted to 0, ideally we should shift array_to left when remove
-void remove_background_process(pid_t process){
-//find pid
-  for(size_t i = 0; i<list_size ; i++){
-    if (background_process_list[i] == process) {
-      for(size_t j = i;j<list_size-1;j++){
-        background_process_list[j]=background_process_list[j+1];
-      }
-      //decrease size of dynamic array;
-      background_process_list = realloc(background_process_list,(list_size-1) * sizeof(pid_t));
-      list_size--;
-      break;
-    }
-  }
-}
-
-void print_background_process(void){
-  if(background_process_list == NULL){
-    printf("No processes running in background\n");
-  }else{
-  for(size_t i = 0;i<list_size;i++){
-    printf("%d ",background_process_list[i]);
-  }
-  printf("\n");
-}
-}
 
 
 static void sh_init(void){
@@ -97,9 +43,7 @@ static void sh_init(void){
   char **args; //array of char pointers
   int status;
   int background;
-  
-  
-  
+
   do {
     printf("> ");
     input = sh_read_input();
@@ -110,8 +54,6 @@ static void sh_init(void){
     free(input);/*free input buffer */ 
     free(args);/*free arg vector */
   }while (status);
-  //free bacgroun process
-  free_background_process();
 }
 
 char *sh_read_input(void){
@@ -120,7 +62,7 @@ char *sh_read_input(void){
     ssize_t characters;
 
     buffer = (char *)malloc(bufsize * sizeof(char));
-    if( buffer == NULL)
+    if(buffer == NULL)
     {
         perror("Unable to allocate buffer");
         exit(1);
@@ -132,9 +74,10 @@ char *sh_read_input(void){
 
 //this functions check if last token is & or in last token the last char is &
 int isBackground(char **args,size_t count){
-  char *lastToken = args[count-1] ;
-  size_t size = strlen(lastToken);
-  return (strcmp(lastToken,"&")==0 || lastToken[size-1]=='&') ? 1 : 0;
+    if(args[count-1] != NULL && strcmp(args[count-1],"&")==0){
+        //background job
+        return 1;
+    }else return 0;
 }
 //
 char **sh_tokenize(char *input,int *background){
@@ -161,29 +104,12 @@ char **sh_tokenize(char *input,int *background){
     //increment argv size
     count++;
   }
+  argv = realloc(argv, (count + 1) * sizeof(char*));
+  argv[count] = NULL;
+
   *background = isBackground(argv, count);
-  // printf("%d\n",*background);
+   printf("%d\n",*background);
   return  argv;
-}
-
-// Signal handler for SIGCHLD
-void sig_child(int signum) {
-    int status;
-    pid_t pid;
-    
-    // Wait for any child process without blocking
-    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-        // Remove the finished child process from the background process list
-        remove_background_process(pid);
-        printf("Child process with PID %d terminated\n", pid);
-    }
-}
-
-//Signal handler for  sig_int
-void sig_int(int signum){
-  printf("SIGINT received. Exiting the shell.\n");
-  free_background_process(); // Free the background process list memory
-  exit(EXIT_SUCCESS);
 }
 
 int sh_exec(char **argv,int background){
@@ -198,24 +124,19 @@ int sh_exec(char **argv,int background){
       break;
     case 0:
       /*child process */
-      // child must not receive the same type of signal of parent
-      signal(SIGINT,SIG_DFL);
-      signal(SIGCHLD,SIG_DFL);
       if(execvp(argv[0],argv)==-1){
-        // perror("exec error");
+         perror("execvp");
         exit(EXIT_FAILURE);     
       }
       break;
     default:
       /*parent process */
       if(background){
-        add_background_process(pid);
-        printf("process with PID: %d created in background\n",pid);
+          //logic
       }else {
         /*run foreground */
         waitpid(pid, &status, 0);
         printf("executing (): PID %d finished with exit status: %d\n",pid,WEXITSTATUS(status));
-      
       }
 
   }
@@ -241,11 +162,6 @@ int sh_exec_cd(char **argv){
   return 1;
 }
 
-int sh_exec_jobs(char **argv){
-  print_background_process();
-  return 1;
-}
-
 
 int sh_exec_help(char **argv){
   size_t len = sizeof(builtin)/sizeof(char*);
@@ -263,9 +179,6 @@ int sh_exec_exit(char **argv){
 
 int main(void)
 { 
-// Register signal handlers
-  signal(SIGCHLD, sig_child);
-  signal(SIGINT, sig_int);
 
   sh_init();
   
