@@ -1,5 +1,5 @@
 #include "shell.h"
-// #include <cstddef>
+#include "builtin.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,10 +8,20 @@
 #include <wait.h>
 
 #define EXIT_SHELL 1
-
+#define PATH_LEN 1024
 char prompt[PROMPT_LEN];
 
 static char buffer[BUFF_LEN];
+
+void print_prompt() {
+  char cwd[1024];
+  if (getcwd(cwd, sizeof(cwd)) != NULL) {
+    printf("%s $ ", cwd);
+  } else {
+    perror("getcwd() error");
+    printf("Shell $ "); // Default prompt if getcwd fails
+  }
+}
 
 char *read_line(const char *prompt) {
   int i = 0;
@@ -48,9 +58,6 @@ Command *create_command(char *name, char **args, int num_args, int background) {
 void print_command(Command *cmd) {
   printf("Command name:%s\n", cmd->name);
   printf("Num of args: %d\n", cmd->num_args);
-  // for (int i = 0; i < cmd->num_args; i++) {
-  //   printf("args[%d] %s\n", i, cmd->args[i]);
-  // }
   printf("is background: %d\n", cmd->background);
 }
 
@@ -96,6 +103,14 @@ int run_command(char *cmd) {
 
   Command *command = parse_line(cmd);
 
+  if (exit_shell(command)) {
+    free_command(command);
+    return EXIT_SHELL;
+  }
+  if (cd(command)) {
+    free_command(command);
+  }
+
   pid_t pid = fork();
   if (pid < 0) {
     perror("fork");
@@ -119,13 +134,30 @@ int run_command(char *cmd) {
 
 static void run_shell() {
   char *cmd;
+  print_prompt();
   while ((cmd = read_line(prompt)) != NULL) {
+    print_prompt();
     if (run_command(cmd) == EXIT_SHELL)
       return;
   }
 }
 
+// static void init_shell() {
+//
+//   char buf[BUFF_LEN] = {0};
+//   char *home = getenv("HOME");
+//   // printf("%s", home);
+//
+//   if (chdir(home) < 0) {
+//     snprintf(buf, sizeof buf, "cannot cd to %s ", home);
+//     perror(buf);
+//   }
+//   // printf("~%s ", home);
+// }
+
 int main(void) {
+  // init shell in $HOME directory
+  // init_shell();
   run_shell();
   return 0;
 }

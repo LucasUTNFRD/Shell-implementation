@@ -26,6 +26,8 @@ char **tokenize_prompt(char *prompt, int *num_args);
 void free_command(Command *cmd);
 
 char *read_line(const char *prompt);
+static void run_shell();
+static void init_shell();
 int run_command(char *cmd);
-
+void print_prompt();
 #endif // !SHELL_H
