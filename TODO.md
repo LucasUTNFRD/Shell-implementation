@@ -6,4 +6,4 @@
  -[ ] Fix prompt printig when cd
 
 # STUFF
-first make shell print the prompt in readline func.
+

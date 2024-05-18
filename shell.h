@@ -8,7 +8,7 @@
 #define END_STRING '\0'
 #define MAXARGS 20
 #define DELIM " \n"
-
+#define SPACE " "
 typedef struct {
   char *name;   // Command name
   char **args;  // Command arguments (including command name itself)

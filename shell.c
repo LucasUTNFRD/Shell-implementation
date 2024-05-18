@@ -98,15 +98,14 @@ int run_command(char *cmd) {
     return 0;
   }
 
-  Command *command = parse_line(cmd);
-
-  if (exit_shell(command)) {
-    free_command(command);
+  if (exit_shell(cmd)) {
     return EXIT_SHELL;
   }
-  if (cd(command)) {
-    free_command(command);
+  if (cd(cmd)) {
+    return 0;
   }
+
+  Command *command = parse_line(cmd);
 
   pid_t pid = fork();
   if (pid < 0) {
