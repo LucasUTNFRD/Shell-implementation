@@ -53,3 +53,10 @@ int exit_shell(char *cmd) {
   }
   return 0;
 }
+
+int exec_jobs(char *cmd) {
+  if (strcmp(cmd, "jobs") == 0) {
+    return true;
+  }
+  return 0;
+}

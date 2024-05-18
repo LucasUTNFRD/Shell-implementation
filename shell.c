@@ -1,5 +1,6 @@
 #include "shell.h"
 #include "builtin.h"
+#include "job.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,11 +8,33 @@
 #include <unistd.h>
 #include <wait.h>
 
+Jobs_table *jobs;
+
+void sigchld_handler(int signum) {
+  pid_t pid;
+  int status;
+
+  while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+    // Find the job in the jobs_table and remove it
+    for (size_t i = 0; i < jobs->counter; ++i) {
+      if (jobs->list[i].pid == pid) {
+        printf("Background job [%d] %s finished\n", jobs->list[i].job_id,
+               jobs->list[i].command);
+        // printf("%s\n", prompt);
+        remove_job(jobs, jobs->list[i]);
+        break;
+      }
+    }
+  }
+}
+
 //[username@domain directory]$
 char prompt[PROMPT_LEN] = {0};
 
 // Var used for reading line from user
 static char buffer[BUFF_LEN];
+
+int status = 0;
 
 // read a line from the standar input
 // and prints the prompt
@@ -85,11 +108,25 @@ char **tokenize_input(char *input, int *num_args) {
   return args;
 }
 
+//*
+// ex  ={'s','l','e','e','p','&'}
+// ex  ={'s','l','e','e','p',' ',&'}
+//*/
+int isBackground(char **args, int argc) {
+  if (argc > 0 && strcmp(args[argc - 1], "&") == 0) {
+    args[argc - 1] = NULL; // remove the ampersand so it could be executed.
+    return BG;
+  } else {
+    return FG;
+  }
+}
+
 Command *parse_line(char *input) {
   int num_args;
   char **args = tokenize_input(input, &num_args);
   char *name = args[0];
-  Command *cmd = create_command(name, args, num_args, 0);
+  int background = isBackground(args, num_args);
+  Command *cmd = create_command(name, args, num_args, background);
   return cmd;
 }
 
@@ -105,7 +142,13 @@ int run_command(char *cmd) {
     return 0;
   }
 
+  if (exec_jobs(cmd)) {
+    print_jobs(jobs);
+    return 0;
+  }
+
   Command *command = parse_line(cmd);
+  // print_command(command);
 
   pid_t pid = fork();
   if (pid < 0) {
@@ -119,9 +162,15 @@ int run_command(char *cmd) {
       exit(EXIT_FAILURE);
     }
   } else {
-    if (!command->background) {
+    // parent process
+    if (command->background != BG) {
       int status;
       waitpid(pid, &status, 0);
+    } else {
+      // logic for jobs table
+      Job_t job = {pid, jobs->counter + 1, strdup(command->name)};
+      add_job(jobs, job);
+      printf("$ Background job [%d] %d\n", job.job_id, job.pid);
     }
   }
   free_command(command);
@@ -146,10 +195,14 @@ static void init_shell() {
   } else {
     snprintf(prompt, sizeof prompt, "(%s)", home);
   }
+  // initalize job lists
+  jobs = init_jobs();
+  signal(SIGCHLD, sigchld_handler);
 }
 
 int main(void) {
   init_shell();
   run_shell();
+  free_jobs(jobs);
   return 0;
 }
