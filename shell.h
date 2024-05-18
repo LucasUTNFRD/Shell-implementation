@@ -1,6 +1,7 @@
 #ifndef SHELL_H
 #define SHELL_H
 
+#define EXIT_SHELL 1
 #define PROMPT_LEN 1024
 #define BUFF_LEN 1024
 #define END_LINE '\n'
@@ -27,7 +28,5 @@ void free_command(Command *cmd);
 
 char *read_line(const char *prompt);
 static void run_shell();
-static void init_shell();
 int run_command(char *cmd);
-void print_prompt();
 #endif // !SHELL_H
