@@ -21,12 +21,16 @@ typedef struct {
   exec_t
       background; // Flag indicating if the command should run in the background
   char *input_redirect, *output_redirect;
+  int append_output;
 
 } Command;
 
-Command *create_command(char *name, char **args, int num_args, int background);
+Command *create_command(char *name, char **args, int num_args,
+                        exec_t background, char *input_file,
+                        char *input_redirect, int append_output);
 Command *parse_line(char *prompt);
 char **tokenize_input(char *prompt, int *num_args);
+void print_command(Command *cmd);
 void free_command(Command *cmd);
 void sigchld_handler(int signum);
 char *read_line(const char *prompt);
