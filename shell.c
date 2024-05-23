@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 #include <wait.h>
 
@@ -89,24 +90,7 @@ void free_command(Command *cmd) {
 
 // this function is using wrongly prompt
 // it should be using buffer.
-char **tokenize_input(char *input, int *num_args) {
-  int i = 0;
-  char **args = (char **)malloc((MAXARGS + 1) * sizeof(char *));
-  if (args == NULL) {
-    perror("malloc failed\n");
-    exit(1);
-  }
-  char *token = strtok(input, DELIM);
-  while (token != NULL && i < MAXARGS) {
-    args[i] = token;
-    // printf("token traced: %s\n", args[i]);
-    i++;
-    token = strtok(NULL, DELIM);
-  }
-  args[i] = NULL;
-  *num_args = i;
-  return args;
-}
+char **tokenize_input(char *input, int *num_args) {}
 
 //*
 // ex  ={'s','l','e','e','p','&'}
@@ -122,13 +106,32 @@ int isBackground(char **args, int argc) {
 }
 
 Command *parse_line(char *input) {
-  int num_args;
-  char **args = tokenize_input(input, &num_args);
-  char *name = args[0];
-  int background = isBackground(args, num_args);
-  Command *cmd = create_command(name, args, num_args, background);
-  return cmd;
+  int i = 0;
+  char **argv = (char **)malloc((MAXARGS + 1) * sizeof(char *));
+
+  if (argv == NULL) {
+    perror("malloc failed\n");
+    exit(1);
+  }
+  char *token = strtok(input, DELIM);
+  while (token != NULL && i < MAXARGS) {
+    argv[i] = token;
+    // printf("token traced: %s\n", args[i]);
+    i++;
+    token = strtok(NULL, DELIM);
+  }
+  argv[i] = NULL;
 }
+// Command *parse_line(char *input) {
+//   int num_args;
+//   char **args = tokenize_input(input, &num_args);
+//   char *name = args[0];
+//   int background = isBackground(args, num_args);
+//   char *output_file;
+//   char *input_file;
+//   Command *cmd = create_command(name, args, num_args, background);
+//   return cmd;
+// }
 
 int run_command(char *cmd) {
   if (strlen(cmd) == 0) {
@@ -156,11 +159,15 @@ int run_command(char *cmd) {
     return -1;
   } else if (pid == 0) {
     // child process
-    // exectute the Command
-    if (execvp(command->name, command->args) == -1) {
-      perror("execvp");
-      exit(EXIT_FAILURE);
+    // I/O redirection logic
+    if (command->input_file != NULL) {
     }
+    if (command->output_file != NULL)
+      // exectute the Command
+      if (execvp(command->name, command->args) == -1) {
+        perror("execvp");
+        exit(EXIT_FAILURE);
+      }
   } else {
     // parent process
     if (command->background != BG) {

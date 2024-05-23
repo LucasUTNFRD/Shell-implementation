@@ -18,12 +18,15 @@ typedef struct {
   int num_args; // Number of arguments
   // char *input_redirect;  // Input file redirection (if any)
   // char *output_redirect; // Output file redirection (if any)
-  int background; // Flag indicating if the command should run in the background
+  exec_t
+      background; // Flag indicating if the command should run in the background
+  char *input_redirect, *output_redirect;
+
 } Command;
 
 Command *create_command(char *name, char **args, int num_args, int background);
 Command *parse_line(char *prompt);
-char **tokenize_prompt(char *prompt, int *num_args);
+char **tokenize_input(char *prompt, int *num_args);
 void free_command(Command *cmd);
 void sigchld_handler(int signum);
 char *read_line(const char *prompt);
