@@ -79,12 +79,6 @@ Command *create_command(char *name, char **args, int num_args,
   return cmd;
 }
 
-// void print_command(Command *cmd) {
-//   printf("Command name:%s\n", cmd->name);
-//   printf("Num of args: %d\n", cmd->num_args);
-//   printf("is background: %d\n", cmd->background);
-// }
-
 void print_command(Command *cmd) {
   if (!cmd) {
     printf("Command is NULL\n");
@@ -208,7 +202,9 @@ int run_command(char *cmd) {
 
   Command *command = parse_line(cmd);
   // use this to trace command parsing
-  print_command(command);
+  if (DEBUG) {
+    print_command(command);
+  }
 
   pid_t pid = fork();
   if (pid < 0) {

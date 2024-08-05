@@ -1,6 +1,8 @@
 #ifndef SHELL_H
 #define SHELL_H
 
+#include <stdbool.h>
+
 #define EXIT_SHELL 1
 #define PROMPT_LEN 1024
 #define BUFF_LEN 1024
@@ -9,6 +11,7 @@
 #define MAXARGS 20
 #define DELIM " \n"
 #define SPACE " "
+#define DEBUG false // set for debugging
 
 typedef enum { FG, BG } exec_t;
 
